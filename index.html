@@ -1,0 +1,1006 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>分店營業日報表與月統計系統</title>
+    <!-- Supabase JS SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        :root {
+            --primary: #1e3a8a;
+            --primary-light: #2563eb;
+            --accent: #d97706;
+            --bg-gray: #f8fafc;
+            --border-color: #cbd5e1;
+            --header-bg: #1e293b;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Microsoft JhengHei", sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-gray);
+            color: #1e293b;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            background: #ffffff;
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+        }
+
+        .app-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #e2e8f0;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .app-title {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .app-title h1 {
+            font-size: 24px;
+            color: #0f172a;
+            font-weight: 700;
+        }
+
+        .badge {
+            background: #e0f2fe;
+            color: #0369a1;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .cloud-status {
+            font-size: 13px;
+            font-weight: 600;
+            padding: 4px 10px;
+            border-radius: 6px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .cloud-online { background: #dcfce7; color: #15803d; }
+        .cloud-syncing { background: #fef3c7; color: #b45309; }
+
+        .controls {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .month-picker {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: #f1f5f9;
+            padding: 6px 14px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+        }
+
+        .month-picker label {
+            font-weight: 600;
+            font-size: 14px;
+            color: #475569;
+        }
+
+        .month-picker input, .month-picker select {
+            padding: 6px 8px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn-primary { background: var(--primary-light); color: white; }
+        .btn-primary:hover { background: var(--primary); }
+
+        .btn-success { background: #059669; color: white; }
+        .btn-success:hover { background: #047857; }
+
+        .btn-outline { background: white; border: 1px solid #cbd5e1; color: #475569; }
+        .btn-outline:hover { background: #f1f5f9; color: #0f172a; }
+
+        .btn-danger { background: #ef4444; color: white; }
+        .btn-danger:hover { background: #dc2626; }
+
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .kpi-card {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 14px 18px;
+            border-left: 4px solid var(--primary-light);
+        }
+
+        .kpi-card.highlight { border-left-color: var(--accent); background: #fffbeb; }
+        .kpi-card.green { border-left-color: #10b981; background: #f0fdf4; }
+
+        .kpi-title { font-size: 13px; color: #64748b; font-weight: 600; margin-bottom: 6px; }
+        .kpi-value { font-size: 20px; font-weight: 700; color: #0f172a; }
+
+        .table-wrapper {
+            overflow-x: auto;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+            margin-bottom: 20px;
+            max-height: 65vh;
+            position: relative;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            font-size: 13px;
+        }
+
+        th, td {
+            padding: 8px 6px;
+            text-align: center;
+            border-bottom: 1px solid #e2e8f0;
+            border-right: 1px solid #e2e8f0;
+        }
+
+        th {
+            background: var(--header-bg);
+            color: #f8fafc;
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            white-space: nowrap;
+        }
+
+        tr:nth-child(even) td { background-color: #f8fafc; }
+        tr:hover td { background-color: #f1f5f9; }
+
+        .col-rev { background-color: #eff6ff !important; font-weight: bold; color: #1e40af; }
+        .col-shihui { background-color: #f0fdf4 !important; font-weight: bold; color: #166534; }
+
+        input.cell-input {
+            width: 100%;
+            padding: 6px 4px;
+            border: 1px solid transparent;
+            background: transparent;
+            text-align: right;
+            font-size: 13px;
+            border-radius: 4px;
+            transition: all 0.15s ease;
+        }
+
+        input.cell-input:focus {
+            background: #ffffff;
+            border-color: var(--primary-light);
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+        }
+
+        input.cell-text { text-align: left; }
+
+        tfoot tr td {
+            background: #e2e8f0 !important;
+            font-weight: bold;
+            color: #0f172a;
+            position: sticky;
+            bottom: 0;
+            z-index: 9;
+            font-size: 14px;
+        }
+
+        .note-box {
+            background: #f1f5f9;
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-size: 13px;
+            color: #475569;
+            line-height: 1.6;
+        }
+
+        @media print {
+            body { background: white; padding: 0; }
+            .container { box-shadow: none; padding: 0; max-width: 100%; }
+            .controls, .btn, .note-box { display: none !important; }
+            .table-wrapper { max-height: none; overflow: visible; border: none; }
+            th { background: #334155 !important; color: white !important; }
+            input.cell-input { border: none; background: transparent; }
+        }
+    
+        /* Modal Styles */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-content {
+            background: white;
+            padding: 24px;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 800px;
+            max-height: 90vh;
+            overflow-y: auto;
+            position: relative;
+        }
+        .modal-close {
+            position: absolute;
+            top: 16px; right: 20px;
+            font-size: 24px;
+            cursor: pointer;
+            color: #64748b;
+        }
+        .modal-close:hover { color: #0f172a; }
+        
+        .stats-bar-container {
+            margin-top: 20px;
+        }
+        .stats-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        .stats-label {
+            width: 80px;
+            font-weight: bold;
+            color: #475569;
+        }
+        .stats-bar-wrapper {
+            flex-grow: 1;
+            background: #f1f5f9;
+            height: 24px;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-right: 12px;
+            position: relative;
+        }
+        .stats-bar {
+            height: 100%;
+            background: var(--primary-light);
+            width: 0%;
+            transition: width 0.5s ease;
+        }
+        .stats-val {
+            width: 100px;
+            text-align: right;
+            font-weight: 600;
+            color: #0f172a;
+        }
+</style>
+</head>
+<body>
+
+<div class="container">
+    <header class="app-header">
+        <div class="app-title">
+            <h1 id="appHeaderTitle">高雄鳳山門市 營業日報表</h1>
+            <span class="badge" id="monthBadge">115年 07月</span>
+            <span class="cloud-status cloud-online" id="cloudStatus">☁️ 雲端已連線</span>
+        </div>
+        <div class="controls">
+            <div class="month-picker"><label for="storeSelect">門市：</label><select id="storeSelect"></select></div>
+            <div class="month-picker">
+                <label for="yearInput">民國年:</label>
+                <input type="number" id="yearInput" value="115" min="100" max="150" style="width: 65px;">
+                <label for="monthSelect">月份:</label>
+                <select id="monthSelect" style="width: 70px;">
+                    <option value="1">01</option>
+                    <option value="2">02</option>
+                    <option value="3">03</option>
+                    <option value="4">04</option>
+                    <option value="5">05</option>
+                    <option value="6">06</option>
+                    <option value="7" selected>07</option>
+                    <option value="8">08</option>
+                    <option value="9">09</option>
+                    <option value="10">10</option>
+                    <option value="11">11</option>
+                    <option value="12">12</option>
+                </select>
+            </div>
+            <button class="btn btn-outline" onclick="initTable()">🔄 重新整理/載入</button>
+            <button class="btn btn-danger" onclick="clearAllData()">🗑️ 清空本店本月</button>
+            <button class="btn btn-success" onclick="exportCSV()">📥 輸出 Excel (CSV)</button>
+            <button class="btn btn-primary" onclick="window.print()">🖨️ 列印報表</button>
+            <button class="btn btn-outline" style="border-color: var(--primary); color: var(--primary);" onclick="openStatsModal()">📊 星期分析圖表</button>
+        </div>
+    </header>
+
+    <div id="loadMessage" role="status" style="margin-bottom:12px;color:#b91c1c;"></div>
+    <div class="kpi-grid">
+        <div class="kpi-card highlight"><div class="kpi-title">每日平均營業額</div><div class="kpi-value" id="kpiDailyAvg">—</div><div id="kpiDayCount" style="font-size:12px;color:#64748b;margin-top:6px">尚無資料</div></div>
+        <div class="kpi-card highlight">
+            <div class="kpi-title">月總營業額</div>
+            <div class="kpi-value" id="kpiTotalRev">$0</div>
+        </div>
+        <div class="kpi-card green">
+            <div class="kpi-title">月實匯/現金總額</div>
+            <div class="kpi-value" id="kpiTotalShihui">$0</div>
+        </div>
+        <div class="kpi-card" style="border-left-color: #ef4444; background: #fef2f2;">
+            <div class="kpi-title">月總支出金額</div>
+            <div class="kpi-value" id="kpiTotalExpense" style="color: #dc2626;">$0</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-title">八方營額總計</div>
+            <div class="kpi-value" id="kpiBafang">$0</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-title">蘿蔔營額總計</div>
+            <div class="kpi-value" id="kpiLuobo">$0</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-title">熊貓 (Foodpanda)</div>
+            <div class="kpi-value" id="kpiPanda">$0</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-title">UberEats</div>
+            <div class="kpi-value" id="kpiUber">$0</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-title">LinePAY</div>
+            <div class="kpi-value" id="kpiLinePay">$0</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-title">台灣PAY</div>
+            <div class="kpi-value" id="kpiTWPay">$0</div>
+        </div>
+        <div class="kpi-card" style="border-left-color: #0ea5e9; background: #f0f9ff;">
+            <div class="kpi-title">平日營業總額 (佔比)</div>
+            <div class="kpi-value" id="kpiTotalWeekday" style="color: #0f172a;">$0 <span style="font-size:14px; font-weight:normal; color:#475569;">(0%)</span></div>
+            <div style="font-size: 12px; color: #64748b; margin-top: 6px; font-weight: 600;" id="kpiAvgWeekday">日均: $0</div>
+        </div>
+        <div class="kpi-card" style="border-left-color: #ef4444; background: #fef2f2;">
+            <div class="kpi-title">假日營業總額 (含國定)</div>
+            <div class="kpi-value" id="kpiTotalHoliday" style="color: #b91c1c;">$0 <span style="font-size:14px; font-weight:normal; color:#475569;">(0%)</span></div>
+            <div style="font-size: 12px; color: #64748b; margin-top: 6px; font-weight: 600;" id="kpiAvgHoliday">日均: $0</div>
+        </div>
+    </div>
+
+    <div class="table-wrapper">
+        <table id="reportTable">
+            <thead>
+                <tr>
+                    <th style="width: 45px;">日期</th>
+                    <th style="width: 45px;">星期</th>
+                    <th style="width: 70px;">賣/訂</th>
+                    <th style="width: 85px;">日進貨額</th>
+                    <th style="width: 75px;">追加金額</th>
+                    <th style="width: 95px;">八方營額</th>
+                    <th style="width: 95px;">蘿蔔營額</th>
+                    <th style="width: 105px; background: #1e3a8a;">日營業額</th>
+                    <th style="width: 85px;">熊貓</th>
+                    <th style="width: 85px;">UberEats</th>
+                    <th style="width: 85px;">台灣PAY</th>
+                    <th style="width: 85px;">LinePAY</th>
+                    <th style="width: 65px;">正負</th>
+                    <th style="width: 140px;">支出(摘要/金額)</th>
+                    <th style="width: 75px;">無開</th>
+                    <th style="width: 105px; background: #166534;">實匯金額</th>
+                </tr>
+            </thead>
+            <tbody id="tableBody"></tbody>
+            <tfoot>
+                <tr>
+                    <td colspan="2">月總計</td>
+                    <td id="footOrders">0</td>
+                    <td id="footPurchase">0</td>
+                    <td id="footAddPurchase">0</td>
+                    <td id="footBafang">0</td>
+                    <td id="footLuobo">0</td>
+                    <td id="footTotalRev" class="col-rev">0</td>
+                    <td id="footPanda">0</td>
+                    <td id="footUber">0</td>
+                    <td id="footTWPay">0</td>
+                    <td id="footLinePay">0</td>
+                    <td id="footDiff">0</td>
+                    <td id="footExpense" style="color: #dc2626; font-weight: bold;">0</td>
+                    <td id="footWukai">0</td>
+                    <td id="footShihui" class="col-shihui">0</td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+
+    <div class="note-box">
+        💡 <strong>跨裝置同步說明：</strong><br>
+        1. 各分店資料獨立儲存；輸入後自動同步，請確認上方顯示「雲端已同步」再關閉網頁。<br>
+        2. <strong>日營業額</strong>：為開放輸入欄位，請直接根據 POS 機單據金額手動填寫。<br>
+        3. <strong>每日平均</strong>：日營業額合計 ÷ 已填日營業額的天數；空白不計，填 0 會計入。休店且不計入平均時，請將日營業額留白。<br>
+        4. <strong>支出摘要與自動解析</strong>：可輸入如 <code>菜560</code>、<code>消毒3250/菜172</code>，系統會自動辨識金額進行加總統計。
+    </div>
+</div>
+
+<!-- 統計分析視窗 -->
+<div class="modal-overlay" id="statsModal" onclick="if(event.target===this) closeStatsModal()">
+    <div class="modal-content">
+        <span class="modal-close" onclick="closeStatsModal()">&times;</span>
+        <h2 style="margin-bottom: 8px; color: #0f172a;">📊 星期營業額分析 (日均)</h2>
+        <p style="color: #64748b; font-size: 14px; margin-bottom: 20px;">統計本月每個星期一到星期日的平均營業額，幫助分析哪些天生意最好。</p>
+        
+        <div class="stats-bar-container" id="statsBarContainer">
+            <!-- Bars injected by JS -->
+        </div>
+    </div>
+</div>
+
+<script>
+// Supabase 雲端資料庫設定
+const SUPABASE_URL = 'https://ezlyqmhoayxeertlkzad.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_brOXfIXkG12NKAJQSq936Q_8r1INI2i';
+const supabaseClient = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
+
+
+// 台灣人事行政總處行事曆資料快取
+let holidayData = {};
+let loadedYears = {};
+
+async function loadCalendarData(year) {
+    if (loadedYears[year]) return;
+    try {
+        // 使用開源的台灣行事曆 API (包含國定假日與補班日)
+        const res = await fetch(`https://cdn.jsdelivr.net/gh/ruyut/TaiwanCalendar/data/${year}.json`);
+        if (!res.ok) throw new Error("API 回應異常");
+        const data = await res.json();
+        data.forEach(d => {
+            holidayData[d.date] = d;
+        });
+        loadedYears[year] = true;
+        console.log(`${year} 年行事曆載入完成`);
+    } catch (e) {
+        console.warn(`${year} 行事曆載入失敗，將使用預設週休二日計算。`, e);
+    }
+}
+
+// 僅修改 name 即可更改顯示店名；id 是永久識別碼，請勿隨意更改。
+const STORES = [{id: 'fengshan', name: '高雄鳳山門市'}, {id: 'store2', name: '第二間店'}];
+let currentStore = 'fengshan';
+const storeName = () => STORES.find(s => s.id === currentStore).name;
+let saveDebounceTimers = {};
+const pendingSaves = new Map();
+let saveChain = Promise.resolve();
+let busy = false;
+let tableReady = false;
+function setBusy(value) {
+    busy = value;
+    document.querySelectorAll('.controls button, .controls input, .controls select, .cell-input').forEach(el => el.disabled = value);
+}
+function escapeHTML(value) {
+    return String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function hasRevenue(day) {
+    const raw = document.querySelector(`.cell-input[data-day="${day}"][data-field="day_rev"]`)?.value.trim().replace(/,/g, '');
+    return raw !== undefined && raw !== '' && Number.isFinite(Number(raw));
+}
+function enqueueSave(payload) {
+    saveChain = saveChain.then(async () => {
+        try {
+            if (!supabaseClient) throw new Error('Supabase 載入失敗，請檢查網路後重新整理。');
+            const { error } = await supabaseClient.from('daily_reports').upsert(payload, {onConflict: 'store_id,year,month,date'});
+            if (error) throw error;
+            if (pendingSaves.get(payload.id) === payload) pendingSaves.delete(payload.id);
+            if (!pendingSaves.size) { setSyncStatus('done'); document.getElementById('loadMessage').textContent = ''; }
+        } catch (error) {
+            setSyncStatus('error');
+            document.getElementById('loadMessage').textContent = '儲存失敗，變更仍留在本頁。請檢查連線與 SQL 更新，再按重新整理／載入重試。' + error.message;
+        }
+    });
+    return saveChain;
+}
+async function flushSaves() {
+    Object.values(saveDebounceTimers).forEach(clearTimeout);
+    saveDebounceTimers = {};
+    await saveChain;
+    for (const payload of [...pendingSaves.values()]) await enqueueSave(payload);
+    return pendingSaves.size === 0;
+}
+window.addEventListener('beforeunload', e => { if (pendingSaves.size) { e.preventDefault(); e.returnValue = ''; } });
+let currentYear = 115;
+let currentMonth = 7;
+
+const weekNames = ['日', '一', '二', '三', '四', '五', '六'];
+
+function setSyncStatus(status) {
+    const el = document.getElementById('cloudStatus');
+    if (!el) return;
+    el.style.background = ''; el.style.color = '';
+    if (status === 'syncing') {
+        el.className = 'cloud-status cloud-syncing';
+        el.innerText = '⏳ 雲端同步中...';
+    } else if (status === 'done') {
+        el.className = 'cloud-status cloud-online';
+        el.innerText = '☁️ 雲端已同步';
+    } else if (status === 'error') {
+        el.className = 'cloud-status';
+        el.style.background = '#fee2e2';
+        el.style.color = '#dc2626';
+        el.innerText = '⚠️ 雲端連線失敗';
+    }
+}
+
+function getDaysInMonth(rocYear, month) {
+    const adYear = parseInt(rocYear) + 1911;
+    return new Date(adYear, month, 0).getDate();
+}
+
+function getWeekdayName(rocYear, month, day) {
+    const adYear = parseInt(rocYear) + 1911;
+    const date = new Date(adYear, month - 1, day);
+    return weekNames[date.getDay()];
+}
+
+function parseExpenseVal(val) {
+    if (!val) return 0;
+    if (typeof val === 'number') return val;
+    const matches = val.toString().match(/\d+/g);
+    if (!matches) return 0;
+    return matches.reduce((sum, n) => sum + parseInt(n, 10), 0);
+}
+
+function parseNum(val) {
+    if (!val) return 0;
+    const cleanStr = val.toString().replace(/,/g, '').trim();
+    const num = parseFloat(cleanStr);
+    return isNaN(num) ? 0 : num;
+}
+
+async function fetchMonthDataFromCloud(year, month) {
+    if (!supabaseClient) throw new Error('無法載入 Supabase，請檢查網路。');
+    const {data, error} = await supabaseClient.from('daily_reports').select('*')
+        .eq('store_id', currentStore).eq('year', year).eq('month', month);
+    if (error) throw error;
+    return data || [];
+}
+
+function saveDayToCloud(day) {
+    setSyncStatus('syncing');
+
+    const getRaw = (field) => {
+        const el = document.querySelector(`.cell-input[data-day="${day}"][data-field="${field}"]`);
+        return el ? el.value : '';
+    };
+
+    const recordId = currentStore === 'fengshan' ? `${currentYear}_${currentMonth}_${day}` : `${currentStore}_${currentYear}_${currentMonth}_${day}`;
+    const payload = {
+        id: recordId,
+        store_id: currentStore,
+        year: currentYear,
+        month: currentMonth,
+        date: parseInt(day),
+        orders: getRaw('orders'),
+        purchase: getRaw('purchase'),
+        add_purchase: getRaw('add_purchase'),
+        bafang: parseNum(getRaw('bafang')),
+        luobo: parseNum(getRaw('luobo')),
+        day_rev: getRaw('day_rev').trim() === '' ? null : parseNum(getRaw('day_rev')),
+        panda: parseNum(getRaw('panda')),
+        uber: parseNum(getRaw('uber')),
+        twpay: parseNum(getRaw('twpay')),
+        linepay: parseNum(getRaw('linepay')),
+        diff: getRaw('diff'),
+        expense: getRaw('expense'),
+        wukai: parseNum(getRaw('wukai')),
+        shihui: parseNum(getRaw('shihui')),
+        updated_at: new Date()
+    };
+
+    pendingSaves.set(recordId, payload);
+    clearTimeout(saveDebounceTimers[recordId]);
+    saveDebounceTimers[recordId] = setTimeout(() => {
+        delete saveDebounceTimers[recordId];
+        enqueueSave(payload);
+    }, 800);
+}
+
+async function initTable() {
+    if (busy) return;
+    setBusy(true);
+    if (!await flushSaves()) {
+        document.getElementById('storeSelect').value = currentStore;
+        document.getElementById('yearInput').value = currentYear;
+        document.getElementById('monthSelect').value = currentMonth;
+        setBusy(false); return;
+    }
+    currentStore = document.getElementById('storeSelect').value;
+    closeStatsModal();
+    currentYear = parseInt(document.getElementById('yearInput').value) || 115;
+    currentMonth = parseInt(document.getElementById('monthSelect').value) || 7;
+
+    document.getElementById('monthBadge').innerText = `${currentYear}年 ${String(currentMonth).padStart(2, '0')}月`;
+    document.getElementById('appHeaderTitle').innerText = `${storeName()} 營業日報表 (${currentYear}年${currentMonth}月)`;
+
+    const totalDays = getDaysInMonth(currentYear, currentMonth);
+    const tbody = document.getElementById('tableBody');
+    tbody.innerHTML = '';
+
+    setSyncStatus('syncing');
+    tableReady = false;
+    calculateAll();
+    let cloudData;
+    try {
+        [cloudData] = await Promise.all([fetchMonthDataFromCloud(currentYear, currentMonth), loadCalendarData(currentYear + 1911)]);
+        setSyncStatus('done');
+        document.getElementById('loadMessage').textContent = loadedYears[currentYear + 1911] ? '' : '行事曆未載入，平假日暫依週六、週日分類。';
+    } catch (error) {
+        setSyncStatus('error');
+        document.getElementById('loadMessage').textContent = '讀取失敗，請先執行分店更新 SQL 並確認網路，再重新載入。' + error.message;
+        setBusy(false); return;
+    }
+
+    for (let day = 1; day <= totalDays; day++) {
+        const weekday = getWeekdayName(currentYear, currentMonth, day);
+        let rowData = cloudData.find(r => r.date === day) || {};
+
+        // 判斷是否為假日 (結合政府行事曆)
+        const dateKey = `${currentYear + 1911}${String(currentMonth).padStart(2, '0')}${String(day).padStart(2, '0')}`;
+        const dayCalendar = holidayData[dateKey];
+        
+        let isHoliday = (weekday === '六' || weekday === '日');
+        let holidayDesc = '';
+        
+        if (dayCalendar) {
+            isHoliday = dayCalendar.isHoliday;
+            if (dayCalendar.description) {
+                holidayDesc = `<br><span style="font-size:10px; color:#b91c1c; font-weight:bold;">${escapeHTML(dayCalendar.description)}</span>`;
+            }
+        }
+
+        const weekdayColor = isHoliday ? '#dc2626' : '#475569';
+        const rowBgStyle = isHoliday ? 'background-color: #fff1f2;' : '';
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td style="${rowBgStyle}"><strong>${day}</strong></td>
+            <td style="${rowBgStyle} color: ${weekdayColor}; font-weight: ${isHoliday ? 'bold' : 'normal'}; line-height: 1.2;">${weekday}${holidayDesc}</td>
+            <td style="${rowBgStyle}"><input type="text" class="cell-input" data-day="${day}" data-field="orders" value="${escapeHTML(rowData.orders)}"></td>
+            <td style="${rowBgStyle}"><input type="text" class="cell-input" data-day="${day}" data-field="purchase" value="${escapeHTML(rowData.purchase)}"></td>
+            <td style="${rowBgStyle}"><input type="text" class="cell-input" data-day="${day}" data-field="add_purchase" value="${escapeHTML(rowData.add_purchase)}"></td>
+            <td style="${rowBgStyle}"><input type="text" class="cell-input" data-day="${day}" data-field="bafang" value="${escapeHTML(rowData.bafang)}"></td>
+            <td style="${rowBgStyle}"><input type="text" class="cell-input" data-day="${day}" data-field="luobo" value="${escapeHTML(rowData.luobo)}"></td>
+            <td style="${rowBgStyle}"><input type="text" class="cell-input col-rev" data-day="${day}" data-field="day_rev" value="${escapeHTML(rowData.day_rev)}"></td>
+            <td style="${rowBgStyle}"><input type="text" class="cell-input" data-day="${day}" data-field="panda" value="${escapeHTML(rowData.panda)}"></td>
+            <td style="${rowBgStyle}"><input type="text" class="cell-input" data-day="${day}" data-field="uber" value="${escapeHTML(rowData.uber)}"></td>
+            <td style="${rowBgStyle}"><input type="text" class="cell-input" data-day="${day}" data-field="twpay" value="${escapeHTML(rowData.twpay)}"></td>
+            <td style="${rowBgStyle}"><input type="text" class="cell-input" data-day="${day}" data-field="linepay" value="${escapeHTML(rowData.linepay)}"></td>
+            <td style="${rowBgStyle}"><input type="text" class="cell-input" data-day="${day}" data-field="diff" value="${escapeHTML(rowData.diff)}"></td>
+            <td style="${rowBgStyle}"><input type="text" class="cell-input cell-text" data-day="${day}" data-field="expense" value="${escapeHTML(rowData.expense)}" placeholder="例: 菜560"></td>
+            <td style="${rowBgStyle}"><input type="text" class="cell-input" data-day="${day}" data-field="wukai" value="${escapeHTML(rowData.wukai)}"></td>
+            <td style="${rowBgStyle}"><input type="text" class="cell-input col-shihui" data-day="${day}" data-field="shihui" value="${escapeHTML(rowData.shihui)}"></td>
+        `;
+        tbody.appendChild(tr);
+    }
+
+    tableReady = true;
+    bindInputEvents();
+    calculateAll();
+    setBusy(false);
+}
+
+function bindInputEvents() {
+    const inputs = document.querySelectorAll('.cell-input');
+    inputs.forEach(input => {
+        input.addEventListener('input', () => {
+            calculateAll();
+            
+            saveDayToCloud(input.dataset.day);
+        });
+
+        input.addEventListener('keydown', (e) => {
+            const day = parseInt(input.dataset.day);
+            const field = input.dataset.field;
+            let targetDay = day;
+
+            if (e.key === 'Enter' || e.key === 'ArrowDown') {
+                targetDay = day + 1;
+            } else if (e.key === 'ArrowUp') {
+                targetDay = day - 1;
+            }
+
+            if (targetDay !== day) {
+                const targetInput = document.querySelector(`.cell-input[data-day="${targetDay}"][data-field="${field}"]`);
+                if (targetInput) {
+                    e.preventDefault();
+                    targetInput.focus();
+                    targetInput.select();
+                }
+            }
+        });
+    });
+}
+
+function calculateAll() {
+    const totalDays = getDaysInMonth(currentYear, currentMonth);
+
+    let totals = {
+        orders: 0, purchase: 0, add_purchase: 0, bafang: 0, luobo: 0,
+        totalRev: 0, panda: 0, uber: 0, twpay: 0, linepay: 0,
+        diff: 0, expense: 0, wukai: 0, shihui: 0
+    };
+
+    let weekdayCount = 0;
+    let holidayCount = 0;
+    let weekdayRev = 0;
+    let holidayRev = 0;
+
+    for (let day = 1; day <= totalDays; day++) {
+        const getVal = (field) => {
+            const el = document.querySelector(`.cell-input[data-day="${day}"][data-field="${field}"]`);
+            return el ? parseNum(el.value) : 0;
+        };
+
+        const getExpenseVal = () => {
+            const el = document.querySelector(`.cell-input[data-day="${day}"][data-field="expense"]`);
+            return el ? parseExpenseVal(el.value) : 0;
+        };
+
+        const dayRev = getVal('day_rev');
+        const dayExp = getExpenseVal();
+
+        // 判斷平假日
+        const dateKey = `${currentYear + 1911}${String(currentMonth).padStart(2, '0')}${String(day).padStart(2, '0')}`;
+        const dayCalendar = holidayData[dateKey];
+        let isHoliday = false;
+        if (dayCalendar) {
+            isHoliday = dayCalendar.isHoliday;
+        } else {
+            const weekday = getWeekdayName(currentYear, currentMonth, day);
+            isHoliday = (weekday === '六' || weekday === '日');
+        }
+
+        // 有輸入日營業額才列入天數平均計算
+        if (hasRevenue(day)) {
+            if (isHoliday) {
+                holidayCount++;
+                holidayRev += dayRev;
+            } else {
+                weekdayCount++;
+                weekdayRev += dayRev;
+            }
+        }
+
+        totals.orders += getVal('orders');
+        totals.purchase += getVal('purchase');
+        totals.add_purchase += getVal('add_purchase');
+        totals.bafang += getVal('bafang');
+        totals.luobo += getVal('luobo');
+        totals.totalRev += dayRev;
+        totals.panda += getVal('panda');
+        totals.uber += getVal('uber');
+        totals.twpay += getVal('twpay');
+        totals.linepay += getVal('linepay');
+        totals.diff += getVal('diff');
+        totals.expense += dayExp;
+        totals.wukai += getVal('wukai');
+        totals.shihui += getVal('shihui');
+    }
+
+    const recordedDays = weekdayCount + holidayCount;
+    document.getElementById('kpiDailyAvg').textContent = recordedDays ? '$' + (totals.totalRev / recordedDays).toLocaleString('zh-TW', {maximumFractionDigits: 2}) : '—';
+    document.getElementById('kpiDayCount').textContent = `已填營業額 ${recordedDays} 天／本月 ${totalDays} 天`;
+    document.getElementById('footOrders').innerText = totals.orders > 0 ? totals.orders.toLocaleString() : '0';
+    document.getElementById('footPurchase').innerText = totals.purchase.toLocaleString();
+    document.getElementById('footAddPurchase').innerText = totals.add_purchase.toLocaleString();
+    document.getElementById('footBafang').innerText = totals.bafang.toLocaleString();
+    document.getElementById('footLuobo').innerText = totals.luobo.toLocaleString();
+    document.getElementById('footTotalRev').innerText = totals.totalRev.toLocaleString();
+    document.getElementById('footPanda').innerText = totals.panda.toLocaleString();
+    document.getElementById('footUber').innerText = totals.uber.toLocaleString();
+    document.getElementById('footTWPay').innerText = totals.twpay.toLocaleString();
+    document.getElementById('footLinePay').innerText = totals.linepay.toLocaleString();
+    document.getElementById('footDiff').innerText = totals.diff.toLocaleString();
+    document.getElementById('footExpense').innerText = totals.expense.toLocaleString();
+    document.getElementById('footWukai').innerText = totals.wukai.toLocaleString();
+    document.getElementById('footShihui').innerText = totals.shihui.toLocaleString();
+
+    // 新增計算百分比的方法
+    const getPercent = (amount, total) => {
+        if (total === 0) return '0%';
+        return ((amount / total) * 100).toFixed(1) + '%';
+    };
+
+    document.getElementById('kpiTotalRev').innerText = '$' + totals.totalRev.toLocaleString();
+    document.getElementById('kpiTotalShihui').innerText = '$' + totals.shihui.toLocaleString();
+    document.getElementById('kpiTotalExpense').innerText = '$' + totals.expense.toLocaleString();
+    
+    // 套用百分比顯示
+    document.getElementById('kpiBafang').innerHTML = '$' + totals.bafang.toLocaleString() + ' <span style="font-size:14px; font-weight:normal; color:#475569;">(' + getPercent(totals.bafang, totals.totalRev) + ')</span>';
+    document.getElementById('kpiLuobo').innerHTML = '$' + totals.luobo.toLocaleString() + ' <span style="font-size:14px; font-weight:normal; color:#475569;">(' + getPercent(totals.luobo, totals.totalRev) + ')</span>';
+    document.getElementById('kpiPanda').innerHTML = '$' + totals.panda.toLocaleString() + ' <span style="font-size:14px; font-weight:normal; color:#475569;">(' + getPercent(totals.panda, totals.totalRev) + ')</span>';
+    document.getElementById('kpiUber').innerHTML = '$' + totals.uber.toLocaleString() + ' <span style="font-size:14px; font-weight:normal; color:#475569;">(' + getPercent(totals.uber, totals.totalRev) + ')</span>';
+    document.getElementById('kpiLinePay').innerHTML = '$' + totals.linepay.toLocaleString() + ' <span style="font-size:14px; font-weight:normal; color:#475569;">(' + getPercent(totals.linepay, totals.totalRev) + ')</span>';
+    document.getElementById('kpiTWPay').innerHTML = '$' + totals.twpay.toLocaleString() + ' <span style="font-size:14px; font-weight:normal; color:#475569;">(' + getPercent(totals.twpay, totals.totalRev) + ')</span>';
+
+    // 更新平假日總額、佔比與日均
+    const avgWeekday = weekdayCount > 0 ? (weekdayRev / weekdayCount) : 0;
+    const avgHoliday = holidayCount > 0 ? (holidayRev / holidayCount) : 0;
+    
+    document.getElementById('kpiTotalWeekday').innerHTML = '$' + weekdayRev.toLocaleString() + ' <span style="font-size:14px; font-weight:normal; color:#475569;">(' + getPercent(weekdayRev, totals.totalRev) + ')</span>';
+    document.getElementById('kpiAvgWeekday').innerText = '日均: $' + Math.round(avgWeekday).toLocaleString() + ' (' + weekdayCount + '天)';
+    
+    document.getElementById('kpiTotalHoliday').innerHTML = '$' + holidayRev.toLocaleString() + ' <span style="font-size:14px; font-weight:normal; color:#475569;">(' + getPercent(holidayRev, totals.totalRev) + ')</span>';
+    document.getElementById('kpiAvgHoliday').innerText = '日均: $' + Math.round(avgHoliday).toLocaleString() + ' (' + holidayCount + '天)';
+}
+
+async function clearAllData() {
+    if (busy || !tableReady) return;
+    if (!confirm(`確定清空「${storeName()}」${currentYear}年${currentMonth}月的所有資料？此操作無法復原。`)) return;
+    setBusy(true);
+    if (!await flushSaves()) { setBusy(false); return; }
+    try {
+        setSyncStatus('syncing');
+        const {error} = await supabaseClient.from('daily_reports').delete()
+            .eq('store_id', currentStore).eq('year', currentYear).eq('month', currentMonth);
+        if (error) throw error;
+        setBusy(false);
+        await initTable();
+    } catch (error) {
+        setSyncStatus('error');
+        document.getElementById('loadMessage').textContent = '清空失敗：' + error.message;
+        setBusy(false);
+    }
+}
+
+function exportCSV() {
+    if (busy || !tableReady) return;
+    const totalDays = getDaysInMonth(currentYear, currentMonth);
+    let csv = '\uFEFF';
+
+    csv += `門市,${storeName()},民國年,${currentYear},月份,${currentMonth}\n`;
+    csv += '日期,星期,賣/訂,日進貨額,追加金額,八方營額,蘿蔔營額,日營業額,熊貓,UberEats,台灣PAY,LinePAY,正負,支出,無開,實匯\n';
+
+    for (let day = 1; day <= totalDays; day++) {
+        const weekday = getWeekdayName(currentYear, currentMonth, day);
+        const getRaw = (field) => {
+            const el = document.querySelector(`.cell-input[data-day="${day}"][data-field="${field}"]`);
+            return el ? `"${el.value.replace(/"/g, '""')}"` : '""';
+        };
+
+        csv += `${day},${weekday},${getRaw('orders')},${getRaw('purchase')},${getRaw('add_purchase')},${getRaw('bafang')},${getRaw('luobo')},${getRaw('day_rev')},${getRaw('panda')},${getRaw('uber')},${getRaw('twpay')},${getRaw('linepay')},${getRaw('diff')},${getRaw('expense')},${getRaw('wukai')},${getRaw('shihui')}\n`;
+    }
+
+    csv += `月總計,-,${document.getElementById('footOrders').innerText.replace(/,/g, '')},${document.getElementById('footPurchase').innerText.replace(/,/g, '')},${document.getElementById('footAddPurchase').innerText.replace(/,/g, '')},${document.getElementById('footBafang').innerText.replace(/,/g, '')},${document.getElementById('footLuobo').innerText.replace(/,/g, '')},${document.getElementById('footTotalRev').innerText.replace(/,/g, '')},${document.getElementById('footPanda').innerText.replace(/,/g, '')},${document.getElementById('footUber').innerText.replace(/,/g, '')},${document.getElementById('footTWPay').innerText.replace(/,/g, '')},${document.getElementById('footLinePay').innerText.replace(/,/g, '')},${document.getElementById('footDiff').innerText.replace(/,/g, '')},${document.getElementById('footExpense').innerText.replace(/,/g, '')},${document.getElementById('footWukai').innerText.replace(/,/g, '')},${document.getElementById('footShihui').innerText.replace(/,/g, '')}\n`;
+
+    csv += `每日平均營業額,${document.getElementById('kpiDailyAvg').textContent.replace(/[$,]/g, '')}\n平均計算天數,${document.getElementById('kpiDayCount').textContent}\n`;
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `${storeName()}營業月報表_${currentYear}年${currentMonth}月.csv`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+}
+
+const storeSelect = document.getElementById('storeSelect');
+STORES.forEach(store => storeSelect.add(new Option(store.name, store.id)));
+storeSelect.addEventListener('change', initTable);
+document.getElementById('yearInput').addEventListener('change', initTable);
+document.getElementById('monthSelect').addEventListener('change', initTable);
+
+window.onload = () => {
+    // 取得今天的系統日期
+    const today = new Date();
+    const rocYear = today.getFullYear() - 1911; // 轉換為民國年
+    const currentM = today.getMonth() + 1;      // 月份 (0-11，所以要加1)
+    
+    // 將網頁上方的選單設定為今天的年月
+    document.getElementById('yearInput').value = rocYear;
+    document.getElementById('monthSelect').value = currentM;
+    
+    // 載入表格
+    initTable();
+};
+
+// 打開統計視窗
+function openStatsModal() {
+    if (busy || !tableReady) return;
+    calculateDayOfWeekStats();
+    document.getElementById('statsModal').style.display = 'flex';
+}
+
+// 關閉統計視窗
+function closeStatsModal() {
+    document.getElementById('statsModal').style.display = 'none';
+}
+
+// 計算星期一到日的平均營業額並繪製圖表
+function calculateDayOfWeekStats() {
+    const totalDays = getDaysInMonth(currentYear, currentMonth);
+    
+    // 初始化統計物件 { "一": {total:0, count:0}, ... }
+    let dowStats = {};
+    weekNames.forEach(w => dowStats[w] = { total: 0, count: 0 });
+
+    let maxAvg = 0;
+
+    // 收集資料
+    for (let day = 1; day <= totalDays; day++) {
+        const revInput = document.querySelector(`.cell-input[data-day="${day}"][data-field="day_rev"]`);
+        const rev = revInput ? parseNum(revInput.value) : 0;
+        
+        if (hasRevenue(day)) {
+            const weekday = getWeekdayName(currentYear, currentMonth, day);
+            dowStats[weekday].total += rev;
+            dowStats[weekday].count += 1;
+        }
+    }
+
+    // 計算平均與尋找最大值(用來畫長條圖比例)
+    let results = [];
+    // 按照 一 二 三 四 五 六 日 排序
+    const order = ['一', '二', '三', '四', '五', '六', '日'];
+    
+    order.forEach(w => {
+        let avg = dowStats[w].count > 0 ? (dowStats[w].total / dowStats[w].count) : 0;
+        if (avg > maxAvg) maxAvg = avg;
+        results.push({ name: '星期' + w, avg: Math.round(avg), count: dowStats[w].count });
+    });
+
+    // 繪製長條圖
+    const container = document.getElementById('statsBarContainer');
+    container.innerHTML = '';
+
+    results.forEach(r => {
+        let pct = maxAvg > 0 ? (r.avg / maxAvg) * 100 : 0;
+        
+        // 週末給不同的顏色
+        let barColor = (r.name === '星期六' || r.name === '星期日') ? '#ef4444' : 'var(--primary-light)';
+
+        const row = document.createElement('div');
+        row.className = 'stats-row';
+        row.innerHTML = `
+            <div class="stats-label">${r.name}</div>
+            <div class="stats-bar-wrapper">
+                <div class="stats-bar" style="width: ${pct}%; background: ${barColor};"></div>
+            </div>
+            <div class="stats-val">${r.count ? '$' + r.avg.toLocaleString() : '—'}<small style="display:block;color:#64748b">${r.count} 天</small></div>
+        `;
+        container.appendChild(row);
+    });
+}
+
+</script>
+
+</body>
+</html>
